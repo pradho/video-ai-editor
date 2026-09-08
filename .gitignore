@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# scratch + outputs
+work/
+out/
+*.mp4
+!samples/*.mp4
+
+# fetched at build/setup time, never committed
+weights/
+ProPainter/
+scripts/env.sh
+.env

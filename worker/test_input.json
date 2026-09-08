@@ -1,0 +1,10 @@
+{
+  "input": {
+    "video_url": "https://REPLACE-ME/presigned-get/clip.mp4",
+    "prompt": "person",
+    "preview": true,
+    "backend": "propainter",
+    "work_res": 720,
+    "dilate": 12
+  }
+}

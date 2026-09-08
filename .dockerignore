@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+**/__pycache__
+*.pyc
+.venv
+venv
+work
+out
+weights
+ProPainter
+client
+README.md
+*.mp4

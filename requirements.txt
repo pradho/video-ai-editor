@@ -1,0 +1,12 @@
+# Install torch SEPARATELY, matched to your CUDA build. On a RunPod pytorch
+# template it is already present -- do not reinstall it.
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+numpy>=1.24
+opencv-python-headless>=4.9
+Pillow>=10.0
+tqdm>=4.66
+
+# Masking stack
+transformers>=4.44        # Grounding DINO (text prompt -> boxes)
+# SAM 2 is not on PyPI; installed from git by scripts/setup_pod.sh:
+#   pip install "git+https://github.com/facebookresearch/sam2.git"
