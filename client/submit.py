@@ -187,6 +187,14 @@ def main(argv=None):
         return 1
 
     out = res.get("output") or {}
+    # An OOM is reported as {"refresh_worker": True, "job_results": {...}} --
+    # RunPod itself still calls the JOB "COMPLETED" since the handler returned
+    # normally instead of raising. Without unwrapping this, the code below
+    # falls through to the success path and 404s trying to download a file
+    # that was never produced -- confirmed live, that 404 is what actually
+    # sent us looking for this shape in the first place.
+    if isinstance(out.get("job_results"), dict):
+        out = out["job_results"]
     if out.get("status") == "error":
         print(f"[fail] {out['error']}")
         if out.get("hint"):

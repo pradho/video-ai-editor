@@ -24,7 +24,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/opt/hf \
     PROPAINTER_DIR=/opt/ProPainter \
     SAM2_CKPT=/app/weights/sam2.1_hiera_large.pt \
-    SAM2_BUILD_CUDA=0
+    SAM2_BUILD_CUDA=0 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # build-essential is insurance: the runtime base has no compiler, and a single
 # sdist-only dependency would otherwise fail the build. ~80MB compressed
