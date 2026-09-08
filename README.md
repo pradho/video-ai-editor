@@ -178,6 +178,26 @@ docker build -t <user>/video-removal:v1 .
 docker push <user>/video-removal:v1     # ~2,2GB upload; layer base biasanya di-mount
 ```
 
+#### Jebakan versi yang sudah menggagalkan satu build
+
+`transformers>=4.44` tanpa batas atas menarik **5.16.1**, dan transformers 5.x
+mematikan *seluruh* kelas model kalau torch < 2.5.0 —
+`is_torch_available()` mengembalikan False, lalu `from_pretrained` mati dengan
+pesan samar "PyTorch was not found". Base image lama (torch 2.4.1) kena tepat di
+situ.
+
+Dua pagar sekarang terpasang:
+
+- base image torch **2.6.0**, dan `transformers>=4.44,<6` di requirements
+- [scripts/warm_cache.py](scripts/warm_cache.py) memeriksa pasangan
+  torch/transformers **dan** backend image processor (Pillow atau torchvision)
+  di awal build, lalu **menggagalkan build dengan pesan eksplisit** kalau salah.
+  Hanya unduhan model yang dibiarkan lunak — itu tergantung jaringan, dan
+  kegagalannya cuma berarti cold start pertama lambat.
+
+Kalau unduhan Grounding DINO kena rate limit HF, tambahkan `HF_TOKEN` sebagai
+build arg — skripnya mencetak caranya saat gagal.
+
 Setting endpoint:
 
 | setting | nilai | alasan |
@@ -261,8 +281,12 @@ Diuji di WSL2 (Ubuntu 24.04, Python 3.12, ffmpeg 6.1) dengan klip sintetis
 | handler serverless | `Job local_test completed successfully` lewat SDK RunPod, base64 in → base64 out, video hasil 100 frame + audio valid |
 | validasi input + progress update | `_build_options` menolak payload kosong, 6 tahap progress terkirim |
 
-**Belum diuji:** SAM 2, Grounding DINO, ProPainter, Docker build, transport
-presigned URL (butuh bucket sungguhan), `client/submit.py`.
+| `warm_cache.py` | jalur gagal **dan** sukses diuji nyata: torch 2.4.1 → FATAL exit 1, torch 2.6.0 + Pillow → `cached`, exit 0, 892MB |
+| Grounding DINO `from_pretrained` | berhasil memuat 1182 tensor di CPU |
+
+**Belum diuji:** SAM 2, ProPainter, Docker build utuh, transport presigned URL
+(butuh bucket sungguhan), `client/submit.py`. Grounding DINO baru teruji sampai
+tahap memuat model — belum pernah menghasilkan box dari gambar nyata.
 
 Menjalankan handler secara lokal:
 
@@ -330,8 +354,8 @@ Titik gagal yang paling mungkin, berurutan:
 - **Tag base image** `pytorch/pytorch:2.4.1-cuda12.4-cudnn9-devel` — bump kalau
   driver RunPod sudah lebih maju.
 
-Ukuran image: base `-runtime` 3.0GB terkompresi + layer milik kita ~2.2GB
-(bobot SAM 2 900MB, ProPainter ~320MB, cache Grounding DINO ~700MB, deps
+Ukuran image: base `-runtime` (torch 2.6 / CUDA 12.4) 3,3GB terkompresi + layer milik kita ~2.2GB
+(bobot SAM 2 900MB, ProPainter ~320MB, cache Grounding DINO 892MB, deps
 ~270MB). Yang benar-benar kamu upload saat push adalah ~2.2GB itu — layer base
 biasanya di-*mount* dari repo publik Docker Hub, bukan diunggah ulang.
 

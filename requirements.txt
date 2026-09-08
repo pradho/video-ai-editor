@@ -6,7 +6,12 @@ opencv-python-headless>=4.9
 Pillow>=10.0
 tqdm>=4.66
 
-# Masking stack
-transformers>=4.44        # Grounding DINO (text prompt -> boxes)
+# Masking stack.
+# Upper bound is deliberate: an unbounded `transformers>=4.44` pulled 5.16.1,
+# which gates every model class behind torch >= 2.5 and broke the image build
+# against a torch 2.4.1 base. Cap the major version so a future 6.x cannot do
+# the same thing silently. scripts/warm_cache.py fails the build loudly if the
+# torch/transformers pairing is ever wrong again.
+transformers>=4.44,<6     # Grounding DINO (text prompt -> boxes)
 # SAM 2 is not on PyPI; installed from git by scripts/setup_pod.sh:
 #   pip install "git+https://github.com/facebookresearch/sam2.git"
