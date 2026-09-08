@@ -12,3 +12,7 @@ ProPainter
 client
 README.md
 *.mp4
+
+# never ship this: the runpod SDK picks up a test_input.json in the working
+# directory and runs a one-shot local test instead of starting the server.
+test_input.json

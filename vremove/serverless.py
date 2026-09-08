@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""RunPod serverless handler.
+"""RunPod serverless job handler.
+
+Lives inside the package so its imports resolve from any working directory.
+The entrypoint that actually calls runpod.serverless.start() is handler.py at
+the repo root: RunPod's GitHub builder scans the repository for that call and
+only recognises it at the top level of a root-level file -- nested in a
+subdirectory, or guarded by __name__ == "__main__", it reports
+"runpod.serverless.start() handler not found in your repo".
 
 Design notes that matter for cost and reliability:
 
@@ -11,26 +18,22 @@ Design notes that matter for cost and reliability:
 * CUDA OOM returns refresh_worker so RunPod recycles the container instead of
   leaving a poisoned worker to fail every subsequent job.
 
-Local smoke test (no GPU needed if you use --backend median):
-    cd worker && python handler.py            # picks up test_input.json
+Local smoke test (no GPU needed with backend "median"):
+    PRELOAD=0 python handler.py               # picks up test_input.json
 """
 from __future__ import annotations
 
 import os
 import shutil
-import sys
 import tempfile
 import time
 import traceback
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import runpod
 
-import runpod  # noqa: E402
-
-import storage  # noqa: E402
-from vremove import masking  # noqa: E402
-from vremove.pipeline import Options, run  # noqa: E402
+from . import masking, storage, video_io
+from .pipeline import Options, run
 
 DEVICE = os.environ.get("DEVICE", "cuda")
 SAM2_CKPT = os.environ.get("SAM2_CKPT", masking.DEFAULT_SAM2_CKPT)
@@ -139,7 +142,6 @@ def handler(job: dict) -> dict:
 
         src = _fetch_input(inp, work / "input.mp4")
 
-        from vremove import video_io
         info = video_io.probe(src)
         if info.duration > MAX_INPUT_SECONDS:
             raise ValueError(
@@ -185,7 +187,3 @@ def handler(job: dict) -> dict:
                 torch.cuda.empty_cache()
         except Exception:
             pass
-
-
-if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler})

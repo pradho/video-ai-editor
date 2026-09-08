@@ -153,8 +153,8 @@ laptop                          R2/S3                  RunPod worker
 ```
 
 Worker tidak pernah memegang kredensial bucket — hanya URL bertanda tangan yang
-kedaluwarsa. File: [worker/handler.py](worker/handler.py),
-[worker/storage.py](worker/storage.py), [Dockerfile](Dockerfile),
+kedaluwarsa. File: [handler.py](handler.py) + [vremove/serverless.py](vremove/serverless.py),
+[vremove/storage.py](vremove/storage.py), [Dockerfile](Dockerfile),
 klien [client/submit.py](client/submit.py).
 
 ### Build & deploy
@@ -227,13 +227,13 @@ ditinggalkan tetap membakar detik GPU.
 ### Keputusan yang sudah dikunci di kode
 
 - **Model dimuat sekali saat import**, bukan per job
-  ([handler.py:47](worker/handler.py#L47)). Worker hangat melewati ~15 detik
+  ([serverless.py:50](vremove/serverless.py#L50)). Worker hangat melewati ~15 detik
   loading yang kalau tidak, dibayar tiap request.
 - **Async `/run` + polling**, bukan `/runsync` — koneksi HTTP sinkron akan
   timeout jauh sebelum video selesai.
 - **Cap input** durasi & ukuran. Endpoint serverless akan dengan senang hati
   menagihmu untuk klip 40 menit yang ter-submit tidak sengaja.
-- **CUDA OOM → `refresh_worker`** ([handler.py:169](worker/handler.py#L169)).
+- **CUDA OOM → `refresh_worker`** ([serverless.py:179](vremove/serverless.py#L179)).
   Worker yang sudah OOM biasanya rusak permanen; tanpa ini ia akan menggagalkan
   semua job berikutnya.
 - **SAM 2 offload ke CPU** (`offload_video_to_cpu`). Tanpa ini SAM 2 menahan
@@ -258,9 +258,23 @@ Diuji di WSL2 (Ubuntu 24.04, Python 3.12, ffmpeg 6.1) dengan klip sintetis
 | `median` jalur sebenarnya | mask bergerak → objek hilang **6400/6400 → 0 pixel**, plate merekonstruksi background |
 | `composite_hires` | pixel di luar mask drift mean 0.785 / max 23 = persis lantai H.264 |
 | CLI end-to-end | `--box` + `--backend median` |
+| handler serverless | `Job local_test completed successfully` lewat SDK RunPod, base64 in → base64 out, video hasil 100 frame + audio valid |
+| validasi input + progress update | `_build_options` menolak payload kosong, 6 tahap progress terkirim |
 
-**Belum diuji sama sekali:** SAM 2, Grounding DINO, ProPainter, Docker build,
-`worker/handler.py`, `client/submit.py`. Semua itu butuh pod.
+**Belum diuji:** SAM 2, Grounding DINO, ProPainter, Docker build, transport
+presigned URL (butuh bucket sungguhan), `client/submit.py`.
+
+Menjalankan handler secara lokal:
+
+```bash
+pip install runpod requests
+cd /tmp/rt                      # dir apa pun berisi test_input.json
+PRELOAD=0 PYTHONPATH=/path/ke/repo python /path/ke/repo/handler.py
+```
+
+`PRELOAD=0` melewati loading SAM 2 sehingga tidak butuh GPU. Baris
+`Failed to return job results | JOB_DONE_URL` itu normal — di mode lokal tidak
+ada webhook RunPod untuk menerima progress update.
 
 ### Satu default yang terbukti salah dan sudah diperbaiki
 

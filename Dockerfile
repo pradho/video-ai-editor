@@ -47,8 +47,7 @@ RUN python -c "from transformers import AutoModelForZeroShotObjectDetection as M
 
 # --- app code last: the only layer that rebuilds while you iterate ----------
 COPY vremove/ /app/vremove/
-COPY remove.py /app/
-COPY worker/ /app/worker/
+COPY remove.py handler.py /app/
 
-WORKDIR /app/worker
+WORKDIR /app
 CMD ["python", "-u", "handler.py"]
