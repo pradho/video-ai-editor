@@ -41,7 +41,18 @@ RUN pip install -r requirements.txt runpod requests \
  && pip install "git+https://github.com/facebookresearch/sam2.git"
 
 # --- ProPainter: a repo, not a package --------------------------------------
-RUN git clone --depth 1 https://github.com/sczhou/ProPainter /opt/ProPainter
+# Its own requirements.txt is itself incomplete -- it lists imageio-ffmpeg but
+# not imageio, and imageio-ffmpeg does not pull imageio in as a dependency.
+# Confirmed live: a real removal job failed with
+#   ModuleNotFoundError: No module named 'imageio'
+# torch/torchvision lines are stripped before install -- the base image
+# already has a matched torch 2.6.0 CUDA build, and letting pip "satisfy"
+# ProPainter's loose `torch>=1.7.1` could pull a mismatched CPU/CUDA wheel.
+# opencv-python is stripped too: we already installed opencv-python-headless,
+# and having both installed can fight over which cv2 wins.
+RUN git clone --depth 1 https://github.com/sczhou/ProPainter /opt/ProPainter \
+ && grep -viE '^(torch|opencv-python)' /opt/ProPainter/requirements.txt > /tmp/pp-reqs.txt \
+ && pip install -r /tmp/pp-reqs.txt imageio
 
 # --- weights baked into the image -------------------------------------------
 # Deliberately not a network volume: a volume pins the endpoint to a single
