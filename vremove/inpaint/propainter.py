@@ -59,9 +59,21 @@ class ProPainter(Inpainter):
                 cmd.append("--fp16")
 
             print("[propainter]", " ".join(cmd))
-            p = subprocess.run(cmd, cwd=str(repo))
+            # Captured, not inherited: a subprocess crash used to leave nothing
+            # but "ProPainter exited 1" in the job result, sending you digging
+            # through RunPod's log viewer for a traceback that may not even be
+            # there (tqdm/child-process stdout doesn't always reach RunPod's
+            # log shipper). Printed here so it still lands in container logs,
+            # AND the tail comes back in the exception so it reaches the
+            # client directly.
+            p = subprocess.run(cmd, cwd=str(repo), capture_output=True, text=True)
+            if p.stdout:
+                print("[propainter stdout]\n" + p.stdout[-4000:])
+            if p.stderr:
+                print("[propainter stderr]\n" + p.stderr[-4000:])
             if p.returncode != 0:
-                raise RuntimeError(f"ProPainter exited {p.returncode}")
+                tail = "\n".join(p.stderr.strip().splitlines()[-40:]) or "(no stderr captured)"
+                raise RuntimeError(f"ProPainter exited {p.returncode}\n--- stderr tail ---\n{tail}")
 
             # It nests results under <output>/<input basename>/frames.
             produced = sorted(Path(tmp).rglob("*.png")) or sorted(Path(tmp).rglob("*.jpg"))
@@ -106,8 +118,14 @@ class External(Inpainter):
                              masks=Path(masks_dir).resolve(),
                              out=Path(tmp).resolve(), fps=fps)
             print("[external]", cmd)
-            if subprocess.run(cmd, shell=True).returncode != 0:
-                raise RuntimeError("external backend failed")
+            p = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            if p.stdout:
+                print("[external stdout]\n" + p.stdout[-4000:])
+            if p.stderr:
+                print("[external stderr]\n" + p.stderr[-4000:])
+            if p.returncode != 0:
+                tail = "\n".join(p.stderr.strip().splitlines()[-40:]) or "(no stderr captured)"
+                raise RuntimeError(f"external backend exited {p.returncode}\n--- stderr tail ---\n{tail}")
 
             produced = sorted(Path(tmp).rglob("*.png")) or sorted(Path(tmp).rglob("*.jpg"))
             if not produced:
