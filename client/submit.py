@@ -128,10 +128,13 @@ def main(argv=None):
     ap.add_argument("input")
     ap.add_argument("-o", "--output", required=True)
     ap.add_argument("--prompt")
-    ap.add_argument("--point", action="append", default=[], metavar="X,Y[,LABEL[,GROUP]]",
+    ap.add_argument("--point", action="append", default=[],
+                    metavar="X,Y[,LABEL[,GROUP[,FRAME]]]",
                     help="click a pixel; label 1=object 0=not-object (repeatable). "
                          "Different GROUP values track as separate SAM 2 objects, e.g. "
-                         "two different people -- default group is 0 for all points")
+                         "two different people -- default group is 0 for all points. "
+                         "FRAME (default --init-frame) adds this point as a correction "
+                         "at a different frame, where tracking actually drifts")
     ap.add_argument("--no-bidirectional", action="store_true",
                     help="only track forward from --init-frame instead of both directions")
     ap.add_argument("--box", metavar="X0,Y0,X1,Y1",

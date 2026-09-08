@@ -61,7 +61,7 @@ def _build_options(inp: dict) -> Options:
     if not any(inp.get(k) for k in ("prompt", "points", "box")):
         raise ValueError("give 'prompt' (text), 'points' ([[x,y,label],...]) or 'box'")
 
-    points = [tuple(p) if len(p) in (3, 4) else (p[0], p[1], 1)
+    points = [tuple(p) if len(p) in (3, 4, 5) else (p[0], p[1], 1)
               for p in (inp.get("points") or [])]
 
     box = inp.get("box")

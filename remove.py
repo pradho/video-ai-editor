@@ -18,12 +18,14 @@ from vremove.pipeline import Options, run
 
 def _point(s: str):
     parts = s.split(",")
-    if len(parts) not in (2, 3, 4):
-        raise argparse.ArgumentTypeError("--point wants x,y or x,y,label or x,y,label,group")
+    if len(parts) not in (2, 3, 4, 5):
+        raise argparse.ArgumentTypeError(
+            "--point wants x,y or x,y,label or x,y,label,group or x,y,label,group,frame")
     x, y = int(parts[0]), int(parts[1])
     label = int(parts[2]) if len(parts) >= 3 else 1
-    if len(parts) == 4:
-        return (x, y, label, int(parts[3]))
+    if len(parts) >= 4:
+        rest = [int(v) for v in parts[3:]]
+        return (x, y, label, *rest)
     return (x, y, label)
 
 
@@ -55,11 +57,14 @@ def main(argv=None):
     g = ap.add_argument_group("what to remove")
     g.add_argument("--prompt", help='text query, e.g. "person" or "red car"')
     g.add_argument("--point", type=_point, action="append", default=[],
-                   metavar="X,Y[,LABEL[,GROUP]]",
+                   metavar="X,Y[,LABEL[,GROUP[,FRAME]]]",
                    help="click a pixel; label 1=object 0=not-object (repeatable). "
                         "Points share GROUP (default 0) to mean the same thing to "
                         "remove; use different GROUPs for separate objects, e.g. two "
-                        "different people -- otherwise SAM 2 may only track one of them")
+                        "different people -- otherwise SAM 2 may only track one of them. "
+                        "FRAME (default --init-frame) conditions this point at a "
+                        "different frame -- add a correction where tracking actually "
+                        "drifts, e.g. where it bleeds onto someone standing nearby")
     g.add_argument("--box", type=_box, metavar="X0,Y0,X1,Y1",
                    help="fixed rectangle, no model -- for testing the pipeline offline")
     g.add_argument("--init-frame", type=int, default=0,

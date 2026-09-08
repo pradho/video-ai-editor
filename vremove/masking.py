@@ -99,13 +99,19 @@ def track_masks(frames_dir, out_dir, *, boxes=None, points=None,
                 device="cuda", init_frame=0, offload=True, bidirectional=True):
     """Propagate prompts from `init_frame` across the clip, writing 00000.png masks.
 
-    `points` is [(x, y, label)] or [(x, y, label, group)], label 1 = foreground
-    0 = background. Points sharing a `group` (default 0) become one SAM 2
-    object; points in different groups become separate objects, unioned in the
-    output mask. This matters for two physically separate things to remove --
-    one object's prompt asks SAM 2 for a single connected blob, so two people
-    standing apart forced into one prompt tend to yield just one of them. Give
-    each its own group instead of hoping multi-point union works out.
+    `points` is [(x, y, label)], [(x, y, label, group)], or
+    [(x, y, label, group, frame_idx)], label 1 = foreground 0 = background.
+
+    Points sharing a `group` (default 0) become one SAM 2 object; points in
+    different groups become separate objects, unioned in the output mask.
+    This matters for two physically separate things to remove -- one
+    object's prompt asks SAM 2 for a single connected blob, so two people
+    standing apart forced into one prompt tend to yield just one of them.
+    Give each its own group instead of hoping multi-point union works out.
+
+    `frame_idx` (default init_frame) lets a point condition SAM 2 at a
+    different frame -- add a correction where tracking actually drifts, not
+    just at the start. Multiple points can share a (group, frame_idx) pair.
     `offload` keeps decoded frames and per-frame state on CPU -- slower per
     frame, but SAM 2 otherwise pins the whole clip in VRAM and long videos OOM.
 
@@ -140,19 +146,31 @@ def track_masks(frames_dir, out_dir, *, boxes=None, points=None,
             n_obj += 1
 
         if points:
+            # groups[g] is itself keyed by frame_idx: {frame_idx: [(x,y,label), ...]}.
+            # A point's 5th element lets it condition SAM 2 at a frame OTHER than
+            # init_frame -- the standard SAM 2 workflow for fixing drift mid-clip:
+            # scrub to the frame where tracking went wrong (often where the
+            # tracked object passes close behind someone you want to keep) and
+            # add a correction there. Confirmed needed on real footage: a
+            # negative point only at init_frame did not stop the mask from
+            # bleeding onto a bystander ~3s later when the tracked person
+            # crossed behind him in 2D, even though they were never close in
+            # any single frame we'd checked by eye.
             groups: dict = {}
             for p in points:
                 x, y, label = p[0], p[1], p[2]
                 g = p[3] if len(p) > 3 else 0
-                groups.setdefault(g, []).append((x, y, label))
+                fidx = p[4] if len(p) > 4 else init_frame
+                groups.setdefault(g, {}).setdefault(fidx, []).append((x, y, label))
             # Sorted so the same input order always maps to the same obj_ids --
             # harmless either way, but makes a rerun's logs easier to diff.
             for g in sorted(groups, key=str):
-                pts = np.array([[x, y] for x, y, _ in groups[g]], np.float32)
-                lbl = np.array([lb for _, _, lb in groups[g]], np.int32)
                 n_obj += 1
-                predictor.add_new_points_or_box(state, frame_idx=init_frame,
-                                                obj_id=n_obj, points=pts, labels=lbl)
+                for fidx in sorted(groups[g]):
+                    pts = np.array([[x, y] for x, y, _ in groups[g][fidx]], np.float32)
+                    lbl = np.array([lb for _, _, lb in groups[g][fidx]], np.int32)
+                    predictor.add_new_points_or_box(state, frame_idx=fidx,
+                                                    obj_id=n_obj, points=pts, labels=lbl)
 
         if n_obj == 0:
             raise ValueError("no boxes and no points -- nothing to track")
