@@ -1,6 +1,6 @@
 # video-removal
 
-Hapus objek (orang, benda) dari video lewat CLI. Prompt teks atau klik satu titik.
+Hapus objeks (orang, benda) dari video lewat CLI. Prompt teks atau klik satu titik.
 
 ```
 python remove.py in.mp4 -o out.mp4 --prompt "person"
