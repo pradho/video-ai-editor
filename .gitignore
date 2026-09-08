@@ -14,3 +14,6 @@ weights/
 ProPainter/
 scripts/env.sh
 .env
+
+# personal source footage + analysis frames, never committed
+video-source/
