@@ -128,7 +128,12 @@ def main(argv=None):
     ap.add_argument("input")
     ap.add_argument("-o", "--output", required=True)
     ap.add_argument("--prompt")
-    ap.add_argument("--point", action="append", default=[], metavar="X,Y[,LABEL]")
+    ap.add_argument("--point", action="append", default=[], metavar="X,Y[,LABEL[,GROUP]]",
+                    help="click a pixel; label 1=object 0=not-object (repeatable). "
+                         "Different GROUP values track as separate SAM 2 objects, e.g. "
+                         "two different people -- default group is 0 for all points")
+    ap.add_argument("--no-bidirectional", action="store_true",
+                    help="only track forward from --init-frame instead of both directions")
     ap.add_argument("--box", metavar="X0,Y0,X1,Y1",
                     help="fixed rectangle, no model -- smoke-test the endpoint")
     ap.add_argument("--preview", action="store_true")
@@ -150,12 +155,15 @@ def main(argv=None):
     points = []
     for p in a.point:
         parts = [int(x) for x in p.split(",")]
-        points.append(parts if len(parts) == 3 else parts + [1])
+        if len(parts) == 2:
+            parts = parts + [1]          # default label: foreground
+        points.append(parts)
 
     payload = {
         "prompt": a.prompt, "points": points, "init_frame": a.init_frame,
         "backend": a.backend, "work_res": a.work_res, "dilate": a.dilate,
         "preview": a.preview, "composite": not a.no_composite,
+        "bidirectional": not a.no_bidirectional,
     }
     if a.box:
         payload["box"] = [int(x) for x in a.box.split(",")]

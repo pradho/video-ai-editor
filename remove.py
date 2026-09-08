@@ -18,10 +18,13 @@ from vremove.pipeline import Options, run
 
 def _point(s: str):
     parts = s.split(",")
-    if len(parts) not in (2, 3):
-        raise argparse.ArgumentTypeError("--point wants x,y or x,y,label")
+    if len(parts) not in (2, 3, 4):
+        raise argparse.ArgumentTypeError("--point wants x,y or x,y,label or x,y,label,group")
     x, y = int(parts[0]), int(parts[1])
-    return (x, y, int(parts[2]) if len(parts) == 3 else 1)
+    label = int(parts[2]) if len(parts) >= 3 else 1
+    if len(parts) == 4:
+        return (x, y, label, int(parts[3]))
+    return (x, y, label)
 
 
 def _box(s: str):
@@ -52,11 +55,19 @@ def main(argv=None):
     g = ap.add_argument_group("what to remove")
     g.add_argument("--prompt", help='text query, e.g. "person" or "red car"')
     g.add_argument("--point", type=_point, action="append", default=[],
-                   metavar="X,Y[,LABEL]", help="click a pixel; label 1=object 0=not (repeatable)")
+                   metavar="X,Y[,LABEL[,GROUP]]",
+                   help="click a pixel; label 1=object 0=not-object (repeatable). "
+                        "Points share GROUP (default 0) to mean the same thing to "
+                        "remove; use different GROUPs for separate objects, e.g. two "
+                        "different people -- otherwise SAM 2 may only track one of them")
     g.add_argument("--box", type=_box, metavar="X0,Y0,X1,Y1",
                    help="fixed rectangle, no model -- for testing the pipeline offline")
     g.add_argument("--init-frame", type=int, default=0,
                    help="frame the prompt refers to; pick one where the object is fully visible")
+    g.add_argument("--no-bidirectional", action="store_true",
+                   help="only track forward from --init-frame. Default also tracks backward "
+                        "to frame 0, so pick --init-frame 0 for objects present from the start "
+                        "-- this only helps when the object first becomes trackable mid-clip")
 
     g = ap.add_argument_group("mask shaping")
     g.add_argument("--dilate", type=int, default=12,
@@ -114,6 +125,7 @@ def main(argv=None):
         crf=a.crf, feather=a.feather,
         dilate=a.dilate, temporal_pad=a.temporal_pad, close=a.close, min_area=a.min_area,
         device=a.device, sam2_cfg=a.sam2_cfg, sam2_ckpt=a.sam2_ckpt,
+        sam2_bidirectional=not a.no_bidirectional,
         box_threshold=a.box_threshold, text_threshold=a.text_threshold,
         preview=a.preview, keep_work=bool(a.work_dir),
     )

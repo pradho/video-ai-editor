@@ -96,12 +96,24 @@ def detect_boxes(image_path, prompt, *, model_id=DEFAULT_GDINO, device="cuda",
 # --------------------------------------------------------------------------- #
 def track_masks(frames_dir, out_dir, *, boxes=None, points=None,
                 cfg=DEFAULT_SAM2_CFG, ckpt=DEFAULT_SAM2_CKPT,
-                device="cuda", init_frame=0, offload=True):
+                device="cuda", init_frame=0, offload=True, bidirectional=True):
     """Propagate prompts from `init_frame` across the clip, writing 00000.png masks.
 
-    `points` is [(x, y, label)] with label 1 = foreground, 0 = background.
+    `points` is [(x, y, label)] or [(x, y, label, group)], label 1 = foreground
+    0 = background. Points sharing a `group` (default 0) become one SAM 2
+    object; points in different groups become separate objects, unioned in the
+    output mask. This matters for two physically separate things to remove --
+    one object's prompt asks SAM 2 for a single connected blob, so two people
+    standing apart forced into one prompt tend to yield just one of them. Give
+    each its own group instead of hoping multi-point union works out.
     `offload` keeps decoded frames and per-frame state on CPU -- slower per
     frame, but SAM 2 otherwise pins the whole clip in VRAM and long videos OOM.
+
+    `bidirectional` also runs propagate_in_video(reverse=True) from init_frame
+    back to frame 0. Without it, only frames >= init_frame are ever visited --
+    fine if the object first appears at init_frame, wrong if it was already in
+    frame at frame 0 and init_frame just happens to be where you could click it
+    most easily (e.g. the object is bigger/clearer mid-clip than at the start).
     """
     import torch
 
@@ -126,27 +138,55 @@ def track_masks(frames_dir, out_dir, *, boxes=None, points=None,
             predictor.add_new_points_or_box(state, frame_idx=init_frame,
                                             obj_id=i + 1, box=np.asarray(box, np.float32))
             n_obj += 1
+
         if points:
-            pts = np.array([[p[0], p[1]] for p in points], np.float32)
-            lbl = np.array([p[2] for p in points], np.int32)
-            predictor.add_new_points_or_box(state, frame_idx=init_frame,
-                                            obj_id=n_obj + 1, points=pts, labels=lbl)
-            n_obj += 1
+            groups: dict = {}
+            for p in points:
+                x, y, label = p[0], p[1], p[2]
+                g = p[3] if len(p) > 3 else 0
+                groups.setdefault(g, []).append((x, y, label))
+            # Sorted so the same input order always maps to the same obj_ids --
+            # harmless either way, but makes a rerun's logs easier to diff.
+            for g in sorted(groups, key=str):
+                pts = np.array([[x, y] for x, y, _ in groups[g]], np.float32)
+                lbl = np.array([lb for _, _, lb in groups[g]], np.int32)
+                n_obj += 1
+                predictor.add_new_points_or_box(state, frame_idx=init_frame,
+                                                obj_id=n_obj, points=pts, labels=lbl)
+
         if n_obj == 0:
             raise ValueError("no boxes and no points -- nothing to track")
 
         seen = set()
         for idx, _obj_ids, logits in tqdm(predictor.propagate_in_video(state),
-                                          total=len(files), desc="sam2 track"):
+                                          total=len(files) - init_frame, desc="sam2 track fwd"):
             m = (logits > 0).squeeze(1).any(0).cpu().numpy()
             cv2.imwrite(str(out_dir / f"{idx:05d}.png"), (m * 255).astype(np.uint8))
             seen.add(idx)
+
+        if bidirectional and init_frame > 0:
+            try:
+                back_iter = predictor.propagate_in_video(state, reverse=True)
+            except TypeError:
+                # Older/forked SAM 2 builds may not expose `reverse`. Fail
+                # visibly rather than silently leaving frames 0..init_frame-1
+                # blank -- that reads as "the model missed it" when really we
+                # never asked it to look.
+                print(f"[warn] this sam2 build has no propagate_in_video(reverse=...); "
+                      f"frames 0..{init_frame - 1} will NOT be masked. Pick "
+                      f"--init-frame 0 instead if the object is visible there.")
+                back_iter = ()
+            for idx, _obj_ids, logits in tqdm(back_iter, total=init_frame, desc="sam2 track bwd"):
+                m = (logits > 0).squeeze(1).any(0).cpu().numpy()
+                cv2.imwrite(str(out_dir / f"{idx:05d}.png"), (m * 255).astype(np.uint8))
+                seen.add(idx)
 
         # The predictor is cached across jobs; the per-video state is not.
         predictor.reset_state(state)
         del state
 
-    # Frames before init_frame are never visited by forward propagation.
+    # With bidirectional=False (or no reverse support), frames before
+    # init_frame are never visited -- fill them blank rather than leave gaps.
     blank = np.zeros((h, w), np.uint8)
     for i in range(len(files)):
         if i not in seen:

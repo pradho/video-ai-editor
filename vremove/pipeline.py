@@ -38,6 +38,7 @@ class Options:
     sam2_cfg: str = masking.DEFAULT_SAM2_CFG
     sam2_ckpt: str = masking.DEFAULT_SAM2_CKPT
     sam2_offload: bool = True
+    sam2_bidirectional: bool = True
     box_threshold: float = 0.30
     text_threshold: float = 0.25
 
@@ -100,7 +101,8 @@ def run(src, out, work_dir, opts: Options, progress=None) -> dict:
         tick("tracking through video", 25)
         masking.track_masks(work_frames, mask_dir, boxes=boxes, points=opts.points or None,
                             cfg=opts.sam2_cfg, ckpt=opts.sam2_ckpt, device=opts.device,
-                            init_frame=opts.init_frame, offload=opts.sam2_offload)
+                            init_frame=opts.init_frame, offload=opts.sam2_offload,
+                            bidirectional=opts.sam2_bidirectional)
 
     masking.postprocess_masks(mask_dir, dilate=opts.dilate, temporal_pad=opts.temporal_pad,
                               close=opts.close, min_area=opts.min_area)
